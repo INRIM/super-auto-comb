@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "super-auto-comb"
+version = "0.1.0"
+description = ""
+authors = ["Marco Pizzocaro <m.pizzocaro@inrim.it>"]
+readme = "README.md"
+packages = [{include = "super_auto_comb", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^2.1.0"
+scipy = "^1.14.1"
+tqdm = "^4.66.5"
+matplotlib = "^3.9.2"
+tintervals = "^0.1.7"
+pandas = "^2.2.2"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.2"
+ruff = "^0.6.3"
+sphinx = "^8.0.2"
+myst-parser = "^4.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,3 @@
+#datetime        	comb	physical	nominal                	kscale	foffset	N	fbeat_sign	f0_scale	counter1	flo1	min1	max1	counter2	flo2	min2	max2	threshold
+2021-05-04T00:00:00	comb2	cavity4	'518_295_836_590_863.6'	2	67_059_566.	1_036_592	-1	1	11	36e6	58.7e6	59.7e6	12	36e6	58.7e6	59.7e6	0.2
+2023-01-10T00:00:00	comb2	cavity4	'518_295_836_590_863.63'	2	67_290_863.63	1_036_592	-1	1	11	-154.3e6	58.5e6	59.5e6	12	35.7e6	58.7e6	59.7e6	0.2

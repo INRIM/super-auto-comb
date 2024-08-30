@@ -26,3 +26,6 @@ ipython = "^8.27.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+super-auto-comb = "super_auto_comb.cli:cli"

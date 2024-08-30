@@ -17,8 +17,15 @@ from tqdm import tqdm
 
 from super_auto_comb.calc import beat2y
 from super_auto_comb.deglitch import deglitch
+from super_auto_comb.fix_files import find_files, fix_files
 from super_auto_comb.load_files import genfromkk
-from super_auto_comb.track_changes import df_extract, load_cirt_setup, load_do_setup
+from super_auto_comb.track_changes import (
+    df_add_name,
+    df_extract,
+    df_track,
+    load_cirt_setup,
+    load_do_setup,
+)
 from super_auto_comb.utils import generate_dates, parse_input_date
 
 plt.close("all")
@@ -85,79 +92,54 @@ def main(args):
 
     # LOOP 1: load DOs info
     do_bar = tqdm(args.do)
-    setups = []
-    cirt = load_cirt_setup(start, stop)
+    # setups for reading inputs and for saving outpus (tracks different changes)
+    in_setups = []
+    out_setups = []
+
+    # bug: not enough circular t informaton if start is much later that the start in the setup
+    # cirt = load_cirt_setup(start, stop)
+    cirt = load_cirt_setup(start - 40, stop)
+
     for do in do_bar:
         do_bar.set_description(f"Loading {do} setup.")
-        df, valid_combs = load_do_setup(do, dir=args.setup_dir)
-        df = pd.merge_ordered(df, cirt, on="datetime", how="outer", fill_method="ffill")
+        df = load_do_setup(do, dir=args.setup_dir, add=cirt, start=start, stop=stop)
 
-        # track also end
-        # inf for last point
-        df["datetime_end"] = df["datetime"].shift(-1, fill_value=np.inf)
+        # start to worry here about what will be tracked changes
+        # nominal frequency is ALWAYS tracked on the ouput
+        tracked = ["nominal"]
+        if args.track_phys:
+            tracked += ["physical"]
+        if args.track_comb:
+            tracked += ["comb"]
+        if args.track_maser:
+            tracked += ["maser"]
+        if args.track_cirt:
+            tracked += ["cirt"]
 
-        # comb-agnostic maser column
-        def fun(row):
-            if row["comb"] in valid_combs:
-                return row["maser_" + row["comb"]]
-            else:
-                return np.nan
+        tracked_df, keep = df_track(df, tracked)
 
-        df["maser"] = df.apply(fun, axis=1)
+        # i do not like this
+        # maybe the name on the input can derived from all tracked columns, instead from the keep columns that are the tracked columns in which something really changed
+        df_add_name(df, keep)
 
-        # # limit between start/stop
-        # also note valid comb criteria
-        # I can apply it here after I calculated datetime_ends
-        mask = (
-            (df["datetime_end"] >= start)
-            & (df["datetime"] < stop)
-            & (df["comb"].isin(valid_combs))
-        )
-        df = df[mask]
+        in_setups += [df]
+        out_setups += [tracked_df]
 
-        setups += [df]
-
+    # LOOP 2: fix and find files based on date
     date_generated = generate_dates(start, stop)
 
-    # LOOP 2: fix files
     date_bar = tqdm(date_generated)
     files_to_be_processed = []
 
     for date in date_bar:
         date_bar.set_description(f"Checking {date.strftime('%Y-%m-%d')} files.")
-        test = date.strftime("%y%m%d_?_Frequ.txt")
-        files = [
-            os.path.basename(_) for _ in glob.glob(os.path.join(args.comb_dir, test))
-        ]
 
-        # Pcloud may have conflicted files
-        test = date.strftime("%y%m%d_?_Frequ (conflicted).txt")
-        con_files = [
-            os.path.basename(_) for _ in glob.glob(os.path.join(args.comb_dir, test))
-        ]
+        con_files = fix_files(args.comb_dir, date)
 
-        for con_name in con_files:
-            good_name = con_name.replace(" (conflicted)", "")
-            temp_name = "wasconflicted_" + good_name
+        for file in con_files:
+            tqdm.write(f"Conflict resolved for {os.path.basename(file)}.")
 
-            # backup of original file
-            if good_name in files:
-                shutil.copy2(
-                    os.path.join(args.comb_dir, good_name),
-                    os.path.join(args.comb_dir, temp_name),
-                )
-            else:
-                files += [good_name]
-
-            tqdm.write(f"Conflict resolved for {con_name} {good_name}.")
-
-            # rename conflicted file to normal name (conflicted file has all the data)
-            shutil.move(
-                os.path.join(args.comb_dir, con_name),
-                os.path.join(args.comb_dir, good_name),
-            )
-
-        files_to_be_processed += files
+        files_to_be_processed += find_files(args.comb_dir, date)
 
     files_to_be_processed.sort()
 
@@ -181,7 +163,7 @@ def main(args):
         for doi, do in enumerate(do_bar):
             do_bar.set_description("DO: " + do)
 
-            do_setup = setups[doi]
+            do_setup = in_setups[doi]
 
             # LOOP 3c: track changes
             # pandas is stupid :(
@@ -199,18 +181,32 @@ def main(args):
                 data = alldata[datamask]
 
                 if len(data) > 0:
+                    comb = s["comb"]
+                    nominal = s["nominal"]
+                    N = s["N"]  # limit between start/stop
+                    frep = s["frep_" + comb]
+                    f0 = s["f0_" + comb]
+                    fbeat_sign = s["fbeat_sign"]
+                    kscale = s["kscale"]
+                    f0_scale = s["f0_scale"]
+                    foffset = s["foffset"]
+
                     columns = df_extract(s, ["counter", "counter1", "counter2"])
                     bounds = (
                         df_extract(s, ["min", "min1", "min2"]),
                         df_extract(s, ["max", "max1", "max2"]),
                     )
                     los = df_extract(s, ["flo", "flo1", "flo2"])
-                    threshold = s["threshold"]
+                    if len(los) > 1:
+                        threshold = s["threshold"]
+                    else:
+                        # threshold not needed, this is arbitrary as long as >0 (the ouput of np.ptp on a len 1 axis)
+                        threshold = 1
                     median_window = args.median_filter_window
                     median_threshold = args.median_filter_threshold
 
                     # deglitch(alldata,  columns, bounds=(-np.inf, np.inf), los=0., threshold=0.2, glitch_ext=3, median_window=60, median_threshold=250.):
-                    fbeat, mask1, mask2, mask3 = deglitch(
+                    fbeat, mask1, mask2, mask3, ptp = deglitch(
                         data,
                         columns,
                         bounds,
@@ -221,17 +217,15 @@ def main(args):
                         median_threshold=median_threshold,
                     )
 
-                    flag = mask1 & mask2 & mask3
+                    # mask4
+                    # f0
+                    f0_diff = data[:, s["counter_f0_" + comb]] - np.abs(
+                        float(s["f0_" + comb])
+                    )
+                    mask4 = np.abs(f0_diff) < 0.25
+                    tmask = mask1 & mask2 & mask3 & mask4
+                    flag = (tmask) * args.flag
 
-                    comb = s["comb"]
-                    nominal = s["nominal"]
-                    N = s["N"]  # limit between start/stop
-                    frep = s["frep_" + comb]
-                    f0 = s["f0_" + comb]
-                    fbeat_sign = s["fbeat_sign"]
-                    kscale = s["kscale"]
-                    f0_scale = s["f0_scale"]
-                    foffset = s["foffset"]
                     # beat2y(fbeat,  nominal,  N, frep, f0, fbeat_sign=1, kscale=1, f0_scale=1, foffset=0.):
                     y = beat2y(
                         fbeat,
@@ -250,59 +244,113 @@ def main(args):
                     # DONE, concatenate with previous data
                     data_out[doi] += [out]
 
+                    mjd = ti.mjd_from_epoch(data[:, 0])
+
+                    # Some Figure of merit
+                    # * measurement of channel deviation
+                    # sqrt<|diff between channels|^2>
+                    ch_dev = np.sqrt(np.mean(ptp[tmask] ** 2))
+
+                    # f0 deviation
+                    f0_dev = np.mean(f0_diff[tmask])
+
+                    # plot here
+                    fig, axs = plt.subplots(3, sharex=True, figsize=(6.4 * 1.5, 4.8))
+                    fig.suptitle(f"{basename} - {comb} - {do}")
+
+                    axs[0].set_ylabel("Flag")
+                    # axs[0].plot(mjd, flag, label=f'Removed points = {sum(flag==0)}')
+                    axs[0].fill_between(
+                        mjd,
+                        3 - mask1,
+                        2,
+                        label=f"Filter mask -> {sum(~mask1)}",
+                        step="pre",
+                    )
+                    axs[0].fill_between(
+                        mjd,
+                        2 - mask2,
+                        1,
+                        label=f"Glitch mask -> {sum(~mask2)}\nCh. dev {ch_dev*1000:.2f} mHz",
+                        step="pre",
+                    )
+                    axs[0].fill_between(
+                        mjd,
+                        1 - mask3,
+                        0,
+                        label=f"Median mask -> {sum(~mask3)}",
+                        step="pre",
+                    )
+                    axs[0].fill_between(
+                        mjd,
+                        0 - mask4,
+                        -1,
+                        label=f"f0 mask -> {sum(~mask4)}\nf0 dev {f0_dev*1000:.2f} mHz ",
+                        step="pre",
+                    )
+                    axs[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))
+
+                    axs[1].plot(mjd, fbeat * 1e-6, label="raw")
+                    axs[1].plot(
+                        mjd[flag > 0],
+                        fbeat[flag > 0] * 1e-6,
+                        ".",
+                        label=f"All masks -> {sum(flag==0)}",
+                    )
+                    axs[1].plot(
+                        mjd[~(mask2)], fbeat[~(mask2)] * 1e-6, "o", label=f"Glitches"
+                    )
+                    axs[1].set_ylabel("Beat /MHz")
+                    axs[1].legend(loc="center left", bbox_to_anchor=(1, 0.5))
+
+                    if sum(flag) > 0:
+                        meany = np.mean(y[flag > 0])
+                        axs[2].axhline(meany, label=f"Mean = {meany:.3}", color="black")
+
+                    axs[2].plot(
+                        mjd[flag > 0],
+                        y[flag > 0],
+                        ".",
+                        label=f"Points = {sum(flag>0)}",
+                        color="C1",
+                    )
+                    # axs[2].plot(mjd[flag>0], uniform_filter1d(y[flag>0],1000), '.', label=f'Moving average')
+                    axs[2].set_ylabel("y")
+                    axs[2].set_xlabel("MJD")
+                    axs[2].set_xlim(np.min(mjd), np.min(mjd) + 1)
+                    axs[2].legend(loc="center left", bbox_to_anchor=(1, 0.5))
+
+                    plt.tight_layout()
+                    figdir = os.path.join(args.dir, s["name"], args.fig_dir, do)
+
+                    if not os.path.exists(figdir):
+                        os.makedirs(figdir)
+                    figname = os.path.join(figdir, basename + ".png")
+                    plt.savefig(figname)
+
+                    # bug: this leave a figure window hanging araound.
+                    # it does not seem necessary though since I called ioff()
+                    # plt.close()
+
     # LOOP 4: save files
     # LOOP 4a: dos
     do_bar2 = tqdm(args.do)
     for doi, do in enumerate(do_bar2):
         do_bar2.set_description("Saving DO: " + do)
 
-        do_setup = setups[doi].fillna("")
-
-        # nominal frequency is ALWAYS tracked on the ouput
-        tracked = ["nominal"]
-
-        if args.track_phys:
-            tracked += ["physical"]
-        if args.track_comb:
-            tracked += ["comb"]
-        if args.track_maser:
-            tracked += ["maser"]
-        if args.track_cirt:
-            tracked += ["cirt"]
-
-        # PANDAS SUCKS!!!!
-        # to avoid random SettingWithCopyWarning while inserting end_datetime and names I have to use a copy here !?!?
-        # warning are raised (sometimes, maybe if tracked_setup is single row?) while seeting the edn_datetime or the new name
-        tracked_setup = do_setup.drop_duplicates(subset=tracked, keep="first").copy()
-
-        # fix end
-        # inf for last point
-        tracked_setup["datetime_end"] = tracked_setup["datetime"].shift(
-            -1, fill_value=np.inf
-        )
-
-        # some machinery to get meaningful folder name
-        # I want cirt first
-        tracked.reverse()
-        # get only significant info
-        named = tracked_setup[tracked]
-        # keep only columns where something did indeed changed
-        keep = [c for c in named if len(named[c].unique()) > 1]
-        if args.track_cirt and "cirt" not in keep:
-            keep = ["cirt"] + keep
-
-        named = named[keep]
-        tracked_setup["name"] = named.agg("-".join, axis=1)
+        do_setup = out_setups[doi].fillna("")
 
         out = np.concatenate(data_out[doi])
 
         # LOOP 4b: tracked changes
-        for s in tracked_setup.iloc:
+        for s in do_setup.iloc:
             this_start = max(start, s["datetime"])
             this_stop = min(stop, s["datetime_end"])
 
             # mask info
-            infomask = (df["datetime_end"] >= start) & (df["datetime"] < stop)
+            infomask = (do_setup["datetime_end"] >= start) & (
+                do_setup["datetime"] < stop
+            )
             this_setup = do_setup[infomask]
 
             # mask data
@@ -337,8 +385,11 @@ def main(args):
                 message = "\n".join([dodesc, nom, hmdesc])
 
                 link = rl.Link(data=out[datamask], oscA=DO, oscB=HM)
+                link.drop_invalid()
 
                 out_dir = os.path.join(args.dir, s["name"])
                 rl.save_link_to_dir(
                     out_dir, link, time_format=args.time_format, message=message
                 )
+
+    return True

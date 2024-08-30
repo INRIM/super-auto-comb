@@ -4,9 +4,8 @@ from super_auto_comb.track_changes import df_extract, load_cirt_setup, load_do_s
 
 
 def test_load_do_setup():
-    df, combs = load_do_setup("LoYb", "./tests/samples")
-    assert df.shape == (4, 22)
-    assert combs == ["comb2"]
+    df = load_do_setup("LoYb", "./tests/samples")
+    assert df.shape == (3, 24)
 
 
 def test_load_cirt_setup():

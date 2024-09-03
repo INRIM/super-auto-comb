@@ -22,8 +22,12 @@ from super_auto_comb.load_files import genfromkk
 from super_auto_comb.track_changes import (
     df_add_name,
     df_extract,
-    df_track,
-    load_cirt_setup,
+    df_fix_end,
+    df_from_cirt,
+    df_limit,
+    df_merge,
+    df_reduce,
+    format_possibly_changing_info,
     load_do_setup,
 )
 from super_auto_comb.utils import generate_dates, parse_input_date
@@ -101,14 +105,16 @@ def main(args):
 
     # bug: not enough circular t informaton if start is much later that the start in the setup
     # cirt = load_cirt_setup(start, stop)
-    cirt = load_cirt_setup(start - 40, stop)
+    cirt = df_from_cirt(start - 40, stop)
 
     for do in do_bar:
         do_bar.set_description(f"Loading {do} setup.")
-        df = load_do_setup(do, dir=args.setup_dir, add=cirt, start=start, stop=stop)
+        df = load_do_setup(do, dir=args.setup_dir)
+        df = df_merge(df, cirt)
+        df = df_limit(df, start, stop)
 
         # start to worry here about what will be tracked changes
-        # nominal frequency is ALWAYS tracked on the ouput
+        # nominal frequency is ALWAYS tracked on the output
         tracked = ["nominal"]
         if args.track_phys:
             tracked += ["physical"]
@@ -119,14 +125,17 @@ def main(args):
         if args.track_cirt:
             tracked += ["cirt"]
 
-        tracked_df = df_track(df, tracked)
+        df_add_name(
+            df,
+            fix=["cirt"],
+            var=[x for x in ["physical", "comb", "maser"] if x in tracked],
+        )
 
-        # i do not like this
-        # maybe the name on the input can derived from all tracked columns, instead from the keep columns that are the tracked columns in which something really changed
-        df_add_name(df, tracked)
+        # output_df only has major changes tracked
+        output_df = df_reduce(df, tracked)
 
         in_setups += [df]
-        out_setups += [tracked_df]
+        out_setups += [output_df]
 
     # LOOP 2: fix and find files based on date
     date_generated = generate_dates(start, stop)
@@ -173,6 +182,9 @@ def main(args):
             # 	for x in loyb[loyb['datetime']>59900].iloc:
             #  ...:     print(x['cirt'])
             for s in do_setup.iloc:
+                if s["valid"] is False:
+                    continue
+
                 this_start = max(start, s["datetime"])
                 this_stop = min(stop, s["datetime_end"])
 
@@ -203,8 +215,9 @@ def main(args):
                     if len(los) > 1:
                         threshold = s["threshold"]
                     else:
-                        # threshold not needed, this is arbitrary as long as >0 (the ouput of np.ptp on a len 1 axis)
+                        # threshold not needed, this is arbitrary as long as >0 (the output of np.ptp on a len 1 axis)
                         threshold = 1
+
                     median_window = args.median_filter_window
                     median_threshold = args.median_filter_threshold
 
@@ -331,7 +344,7 @@ def main(args):
                     figname = os.path.join(figdir, basename + ".png")
                     plt.savefig(figname)
 
-                    # bug: this leave a figure window hanging araound.
+                    # bug: this leave a figure window hanging around.
                     # it does not seem necessary though since I called ioff()
                     # plt.close()
 
@@ -341,20 +354,25 @@ def main(args):
     for doi, do in enumerate(do_bar2):
         do_bar2.set_description("Saving DO: " + do)
 
-        do_setup = out_setups[doi].fillna("")
+        do_out_setup = out_setups[doi].fillna("")
+        do_in_setup = in_setups[doi].fillna("")
 
         out = np.concatenate(data_out[doi])
 
         # LOOP 4b: tracked changes
-        for s in do_setup.iloc:
+        for s in do_out_setup.iloc:
+            if s["valid"] is False:
+                continue
+
             this_start = max(start, s["datetime"])
             this_stop = min(stop, s["datetime_end"])
 
             # mask info
-            infomask = (do_setup["datetime_end"] >= start) & (
-                do_setup["datetime"] < stop
+            infomask = (do_in_setup["datetime_end"] >= start) & (
+                do_in_setup["datetime"] < stop
             )
-            this_setup = do_setup[infomask]
+            # note that ths_setup may have more lines for each do_out_setup
+            this_setup = do_in_setup[infomask]
 
             # mask data
             tstart = ti.mjd2epoch(this_start)
@@ -363,13 +381,6 @@ def main(args):
             data = out[datamask]
 
             if datamask.any() & infomask.any():
-                # format possibly changing info
-                def fpci(key):
-                    uni = this_setup[key].unique()
-                    what = "/".join(uni)
-
-                    return what
-
                 nominal = s["nominal"].strip("'")
 
                 # TODO: descriptions are no longer used by rl.save_link_to_dir
@@ -379,13 +390,13 @@ def main(args):
 
                 dodesc = (
                     "Designed oscillator = "
-                    + fpci("physical")
+                    + format_possibly_changing_info(this_setup, "physical")
                     + " measured on "
-                    + fpci("comb")
+                    + format_possibly_changing_info(this_setup, "comb")
                 )
                 nom = "# Nominal frequency = " + nominal
-                hmdesc = "# HM = " + fpci("maser")
-                message = "\n".join([dodesc, nom, hmdesc])
+                hm_desc = "# HM = " + format_possibly_changing_info(this_setup, "maser")
+                message = "\n".join([dodesc, nom, hm_desc])
 
                 link = rl.Link(data=out[datamask], oscA=DO, oscB=HM)
                 link.drop_invalid()

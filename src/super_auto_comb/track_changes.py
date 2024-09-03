@@ -4,42 +4,83 @@ import numpy as np
 import pandas as pd
 import tintervals as ti
 
+# track_changes works with pandas dataframes whose first column is 'datetime'.
+# they are interpreted as setup description (frequency, counter channels, etc..) from the given datetime to the datetime on the next row.
+# These dataframes can me manipulated (loaded, merged, reduced, etc...) to keep track of only a subset of columns.
+# For loading inputs, all changes are tracked (e.g., I need to know when a counter channel is changed).
+# Outputs are customizable (e.g., I may or may not want to separate data based on which comb is used).
+# A colum 'name' can be added to describe each row based on some columns.
+# A column 'datetime_end' is always added to be equal to the datetime in the next row.
 
-def load_simple_do_setup(do, dir="", add=None):
-    """Load a simple DO setups. Use Pandas for some magic in keeping track of changes.
 
-    Parameters
-    ----------
-    do : str
-            DO name
-    dir : str, optional
-            working directory, by default ''
-    add : Dataframe
-            data to be merged when tracking changes (e.g., from load_cirt_setup())
+def df_merge(df1, df2):
+    """Merge two Dataframes tracking changes from both."""
+    # merge_ordered + 'ffill' does what I need to track changes
+    df = pd.merge_ordered(df1, df2, on="datetime", how="outer", fill_method="ffill")
+    df_fix_end(df)
+    return df
 
-    Returns
-    -------
-    df
-            Pandas dataframe with DO tracked changes.
 
+def df_fix_end(df):
+    """Update or create the datetime_end column of the Dataframe to be the datetime of the following line (or np.inf)"""
+    df["datetime_end"] = df["datetime"].shift(-1, fill_value=np.inf)
+
+
+def df_reduce(df, subset):
+    """Return a new df with changes only tracked in the subset columns."""
+    tracked_df = df.drop_duplicates(subset=subset, keep="first").copy()
+    df_fix_end(tracked_df)
+
+    return tracked_df
+
+
+def df_extract(df, cols):
+    """Extract columns from a DataFrame OR Series ignoring columns that do not exists"""
+    valid_cols = [c for c in cols if c in df]
+
+    return list(df[valid_cols])
+
+
+def df_add_name(df, fix, var=[]):
+    """Add a name column to the Dataframe based on certain columns.
+    Columns in fix will always be recorded in the name.
+    Columns in var will be recorded only if some change is observed.
     """
-    do_file = os.path.join(dir, do + ".dat")
+    # reverse usually provide better ordering
+    fix.reverse()
+    var.reverse()
 
-    df = pd.read_csv(do_file, sep="\t", converters={0: ti.iso2mjd})
+    if len(var) > 0:
+        sub_df = df[var]
+        keep = [c for c in var if len(sub_df[c].unique()) > 1]
+
+        track = fix + keep
+    else:
+        track = fix
+
+    # TODO: column may not be str
+    sub_df = df[track].fillna("")
+    df["name"] = sub_df.agg("-".join, axis=1)
+
+
+def df_load(file):
+    """Load a Dataframe from a file. The first column in the file should be a ISO datetime."""
+    df = pd.read_csv(file, sep="\t", converters={0: ti.iso2mjd})
     # remove whitespaces and # from column names
     df.columns = df.columns.str.strip(" #")
 
-    if add is not None:
-        df = pd.merge_ordered(df, add, on="datetime", how="outer", fill_method="ffill")
-
-    # track also end
-    # inf for last point
-    df["datetime_end"] = df["datetime"].shift(-1, fill_value=np.inf)
+    df_fix_end(df)
 
     return df
 
 
-def load_do_setup(do, dir="", add=None, start=-np.inf, stop=np.inf):
+def df_limit(df, start, stop):
+    df_fix_end(df)
+    mask = (df["datetime_end"] >= start) & (df["datetime"] < stop)
+    return df[mask]
+
+
+def load_do_setup(do, dir):
     """Load DO and Comb setups. Use Pandas for some magic in keeping track of changes.
 
     Parameters
@@ -48,12 +89,6 @@ def load_do_setup(do, dir="", add=None, start=-np.inf, stop=np.inf):
             DO name
     dir : str, optional
             working directory, by default ''
-    add : Dataframe
-            data to be merged when tracking changes (e.g., from load_cirt_setup())
-    start: float
-            start time limit
-    stop: float
-            stop time limit
 
 
     Returns
@@ -61,14 +96,14 @@ def load_do_setup(do, dir="", add=None, start=-np.inf, stop=np.inf):
     df
             Pandas dataframe with DO and Combs tracked changes.
 
-    valid_combs
-            List of valid (=with specified setup) comb names.
+    Note
+    ----
+    Load DO setups, combining it with comb setups (e.g., so if a DO has been measured with both comb1 and comb2, data is populated automatically).
+
     """
     do_file = os.path.join(dir, do + ".dat")
 
-    df = pd.read_csv(do_file, sep="\t", converters={0: ti.iso2mjd})
-    # remove whitespaces and # from column names
-    df.columns = df.columns.str.strip(" #")
+    df = df_load(do_file)
 
     # load comb setup
     combs = df["comb"].dropna().unique()
@@ -77,29 +112,18 @@ def load_do_setup(do, dir="", add=None, start=-np.inf, stop=np.inf):
     for comb in combs:
         combfile = os.path.join(dir, comb + ".dat")
         try:
-            cdf = pd.read_csv(combfile, sep="\t", converters={0: ti.iso2mjd})
-        except:
+            cdf = df_load(combfile)
+        except FileNotFoundError:
             continue
-
-        # remove whitespaces and # from column names
-        cdf.columns = cdf.columns.str.strip(" #")
 
         # rename columns
         mark = {x: (x + "_" + comb) for x in cdf.columns if x != "datetime"}
         cdf.rename(columns=mark, inplace=True)
 
-        # merge_ordered + 'ffill' does what I need to track changes
-        df = pd.merge_ordered(df, cdf, on="datetime", how="outer", fill_method="ffill")
+        df = df_merge(df, cdf)
         valid_combs += [comb]
 
-    if add is not None:
-        df = pd.merge_ordered(df, add, on="datetime", how="outer", fill_method="ffill")
-
-    # track also end
-    # inf for last point
-    df["datetime_end"] = df["datetime"].shift(-1, fill_value=np.inf)
-
-    # comb-agnostic maser column
+    # add comb-agnostic maser column
     def fun(row):
         if row["comb"] in valid_combs:
             return row["maser_" + row["comb"]]
@@ -108,58 +132,28 @@ def load_do_setup(do, dir="", add=None, start=-np.inf, stop=np.inf):
 
     df["maser"] = df.apply(fun, axis=1)
 
-    # limit between start/stop
-    # also note valid comb criteria
-    # I can apply it here after I calculated datetime_ends
-    mask = (
-        (df["datetime_end"] >= start)
-        & (df["datetime"] < stop)
-        & (df["comb"].isin(valid_combs))
-    )
-    df = df[mask]
+    # valid column
+    def fun(row):
+        return row["comb"] in valid_combs
+
+    df["valid"] = df.apply(fun, axis=1)
+
+    df_fix_end(df)
 
     return df
 
 
-def df_extract(df, cols):
-    """Extract columns from a DataFrame OR Series ignoring columns that do not exists"""
-    valid_cols = [c for c in cols if c in df]
-    return list(df[valid_cols])
-
-
-def load_cirt_setup(start, stop):
+def df_from_cirt(start, stop):
     cirt_start, cirt_stop = ti.cirtvals(start, stop).T
     cirt_labels = ["{}-{:02d}".format(*ti.mjd2cirt(x)) for x in cirt_start]
     return pd.DataFrame({"datetime": cirt_start, "cirt": cirt_labels})
 
 
-def df_track(df, tracked, track_cirt=True):
-    # PANDAS SUCKS!!!!
-    # to avoid random SettingWithCopyWarning while isnerting end_datetime and names I have to use a copy here !?!?
-    # warning are raised (sometimes, maybe if tracked_setup is single row?) while seeting the edn_datetime or the new name
-    # at least moved in a function makes some sense
-    tracked_df = df.drop_duplicates(subset=tracked, keep="first").copy()
+# format possibly changing info
+# A column tracked for changes will always have a unique value associated for each row of inputs and outputs df.
+# Columns not tracked for changes may have more rows in in the input df than in the output df
+def format_possibly_changing_info(df, key):
+    uni = df[key].unique()
+    what = "/".join(uni)
 
-    # fix end
-    # inf for last point
-    tracked_df["datetime_end"] = tracked_df["datetime"].shift(-1, fill_value=np.inf)
-
-    df_add_name(tracked_df, tracked, track_cirt)
-
-    return tracked_df
-
-
-def df_add_name(df, tracked, track_cirt=True):
-    # some machinery to get meaningful folder name
-    # I want cirt first
-    tracked.reverse()
-    # get only significant info
-    named = df[tracked]
-    # keep only columns where something did indeed change
-    keep = [c for c in named if len(named[c].unique()) > 1]
-    if track_cirt and "cirt" not in keep:
-        keep = ["cirt"] + keep
-
-    # store the name for both in and out setups
-    named = named[keep]
-    df["name"] = named.agg("-".join, axis=1)
+    return what

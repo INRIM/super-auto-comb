@@ -72,25 +72,26 @@ def deglitch(
     los = np.resize(np.asarray(los, dtype=float), N)
     data = np.abs(data + los)
 
-    f_beat = np.mean(data, axis=-1)
+    fbeat = np.mean(data, axis=-1)
 
     # mask2 implement double counting
     # using numpy peak-to-peak function
     # note that this handles nicely both single counting (= no glitch detection)
     # and both an hypothetical triple counting, etc..
-    mask2 = np.ptp(data, axis=-1) < threshold
+    ptp = np.ptp(data, axis=-1)
+    mask2 = ptp < threshold
     # deglitch extend to neighbourg datapoints
     mask2 = minimum_filter1d(mask2, glitch_ext)
 
     # mask3 median-filter
     mask = mask1 & mask2
-    rolled = median_filter(f_beat[mask], median_window)
+    rolled = median_filter(fbeat[mask], median_window)
     mask3 = (
-        abs(f_beat[mask] - rolled) < median_threshold
+        abs(fbeat[mask] - rolled) < median_threshold
     )  # 250 Hz correspond to a 5 sigma criteria assuming 1e-13 at 1 s
     mask3 = minimum_filter1d(mask3, glitch_ext)
     # mask3 applies oly to already masked data
     emask3 = np.ones_like(mask).astype(bool)
     emask3[mask] = mask3
 
-    return f_beat, mask1, mask2, emask3
+    return fbeat, mask1, mask2, emask3, ptp

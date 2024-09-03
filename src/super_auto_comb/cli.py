@@ -32,7 +32,7 @@ plt.close("all")
 plt.ioff()
 
 
-def cli():
+def parse_args(args):
     # fmt: off
 
     parser = argparse.ArgumentParser(description='Process Comb data files.', formatter_class=argparse.ArgumentDefaultsHelpFormatter) 
@@ -73,8 +73,11 @@ def cli():
 
     # fmt: on
 
-    # command = sys.argv
-    args = parser.parse_args()
+    return parser.parse_args(args)
+
+
+def cli():
+    args = parse_args(sys.argv[1:])
 
     if not os.path.exists(args.dir):
         os.makedirs(args.dir)
@@ -116,11 +119,11 @@ def main(args):
         if args.track_cirt:
             tracked += ["cirt"]
 
-        tracked_df, keep = df_track(df, tracked)
+        tracked_df = df_track(df, tracked)
 
         # i do not like this
         # maybe the name on the input can derived from all tracked columns, instead from the keep columns that are the tracked columns in which something really changed
-        df_add_name(df, keep)
+        df_add_name(df, tracked)
 
         in_setups += [df]
         out_setups += [tracked_df]

@@ -163,4 +163,4 @@ cython_debug/
 
 
 # test ouputs
-./tests/Outputs
+tests/Outputs

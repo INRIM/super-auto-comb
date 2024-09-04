@@ -1,16 +1,10 @@
-import decimal
-import glob
 import os
 import os.path
-import shutil
 import sys
-from datetime import date, datetime, timedelta
 
 import configargparse
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.lib.recfunctions as rfn
-import pandas as pd
 import tintervals as ti
 import tintervals.rocitlinks as rl
 from tqdm import tqdm
@@ -60,20 +54,20 @@ def parse_args(args):
     parser.add_argument('--fig-dir',  help='Directory for storing figures', default='./Outputs/Figures') 
 
 
-    default_comb_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../Data')) 
-    default_setup_dir = os.path.join(default_comb_dir, 'Setup') 
-    parser.add_argument('--comb-dir',  help='Directory of comb data', default=default_comb_dir) 
-    parser.add_argument('--setup-dir',  help='Directory of setup data (describes comb and designed oscillator setup)', default=default_setup_dir)
+    parser.add_argument('--comb-dir',  help='Directory of comb data', default='.') 
+    parser.add_argument('--setup-dir',  help='Directory of setup data (describes comb and designed oscillator setup)', default='./Setup')
 
     parser.add_argument('--time-format', choices=['iso', 'mjd', 'unix'], help='Output time format',  default='mjd')
 
     parser.add_argument('--do-not-fix-summer-time', action='store_true', help='Will not attempt to fix summer time.')
+
+    parser.add_argument('--median-filter', action='store_true', help='Also apply a median filter')
     parser.add_argument('--median-filter-window', type=int, help='Number of points in the median filter', default=60)
     parser.add_argument('--median-filter-threshold', type=float, help='Median filter threshold', default=250.)
 
     parser.add_argument('--max-columns', type=int, help='Number of columns in the comb datafile', default=12)
 
-    parser.add_argument('--operator', type=str, help='Person in charge of the analysis.', default='Marco Pizzocaro')
+    parser.add_argument('--operator', type=str, help='Person in charge of the analysis.', default='')
     parser.add_argument('--flag', type=int, help='Flag for confidence level (0 = Discarded, 1 = Experimental, 2 = Operational)', default=1)
 
 
@@ -226,9 +220,6 @@ def main(args):
                         # threshold not needed, this is arbitrary as long as >0 (the output of np.ptp on a len 1 axis)
                         threshold = 1
 
-                    median_window = args.median_filter_window
-                    median_threshold = args.median_filter_threshold
-
                     red_data = data[:, columns]
                     f0_meas = data[:, s["counter_f0_" + comb]]
                     los = np.resize(np.asarray(los, dtype=float), columns.shape[0])
@@ -253,15 +244,13 @@ def main(args):
 
                     mask3 = deglitch_from_f0(f0_meas, f0_nominal=s["f0_" + comb], threshold=0.25)
 
-                    median_deglitch = True
-
                     tmask = mask1 & mask2 & mask3
-                    if median_deglitch:
+                    if args.median_filter:
                         mask4 = deglitch_from_median_filter(
                             f_beat,
                             premask=tmask,
-                            median_window=median_window,
-                            median_threshold=median_threshold,
+                            median_window=args.median_window,
+                            median_threshold=args.median_threshold,
                         )
                         tmask = mask1 & mask2 & mask3 & mask4
                     else:
@@ -296,7 +285,9 @@ def main(args):
                     axs[0].fill_between(mjd, 3 - mask1, 2, label=f"Filter mask -> {sum(~mask1)}", step="pre")
                     axs[0].fill_between(mjd, 2 - mask2, 1, label=f"Glitch mask -> {sum(~mask2)}", step="pre")
                     axs[0].fill_between(mjd, 1 - mask3, 0, label=f"f0 mask -> {sum(~mask3)}", step="pre")
-                    axs[0].fill_between(mjd, 0 - mask4, -1, label=f"Median mask -> {sum(~mask4)}", step="pre")
+                    if args.median_filter:
+                        label = f"Median mask ({args.median_window} s/{args.median_threshold} Hz)\n-> {sum(~mask4)}"
+                        axs[0].fill_between(mjd, 0 - mask4, -1, label=label, step="pre")
 
                     axs[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))
                     axs[1].plot(mjd, f_beat * 1e-6, label="raw")
@@ -349,7 +340,7 @@ def main(args):
 
             # mask info
             infomask = (do_in_setup["datetime_end"] >= start) & (do_in_setup["datetime"] < stop)
-            # note that ths_setup may have more lines for each do_out_setup
+            # note that this_setup may have more lines for each do_out_setup
             this_setup = do_in_setup[infomask]
 
             # mask data

@@ -1,3 +1,5 @@
+import shutil
+
 import tintervals.rocitlinks as rl
 
 from super_auto_comb.cli import main, parse_args
@@ -11,8 +13,13 @@ def test_parse_args():
 
 
 def test_main():
+    # delete previous results
+    try:
+        shutil.rmtree("./tests/Outputs/")
+    except FileNotFoundError:
+        pass
     args = parse_args(
-        "--do LoYb --start 59658 --stop 59660 --dir ./tests/Outputs --fig-dir Figures --comb-dir ./tests/samples --setup-dir ./tests/samples --track-cirt".split(
+        "--do LoYb --start 59658 --stop 59660 --dir ./tests/Outputs --fig-dir ./tests/Outputs/Figures --comb-dir ./tests/samples --setup-dir ./tests/samples --track-cirt".split(
             " "
         )
     )

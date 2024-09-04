@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pytz
@@ -26,10 +26,7 @@ def parse_input_date(s):
 def generate_dates(start, stop):
     start = ti.mjd2datetime(start)
     stop = ti.mjd2datetime(stop)
-    date_generated = [
-        start + timedelta(days=-1) + timedelta(days=x)
-        for x in range(0, (stop - start).days + 1)
-    ]
+    date_generated = [start + timedelta(days=-1) + timedelta(days=x) for x in range(0, (stop - start).days + 1)]
     return date_generated
 
 
@@ -41,3 +38,7 @@ def is_summer_time_changing_between(date1, date2):
     local_end = pytz.timezone("Europe/Rome").localize(date2)
     summertime_changed = local_start.tzinfo != local_end.tzinfo
     return summertime_changed
+
+
+def today():
+    return date.today().isoformat()

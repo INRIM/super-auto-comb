@@ -21,7 +21,6 @@ from super_auto_comb.load_files import genfromkk
 from super_auto_comb.track_changes import (
     df_add_name,
     df_extract,
-    df_fix_end,
     df_from_cirt,
     df_limit,
     df_merge,
@@ -29,7 +28,7 @@ from super_auto_comb.track_changes import (
     format_possibly_changing_info,
     load_do_setup,
 )
-from super_auto_comb.utils import generate_dates, parse_input_date
+from super_auto_comb.utils import generate_dates, parse_input_date, today
 
 plt.close("all")
 plt.ioff()
@@ -38,12 +37,12 @@ plt.ioff()
 def parse_args(args):
     # fmt: off
 
-    parser = configargparse.ArgumentParser(description='Process Comb data files.', formatter_class=configargparse.ArgumentDefaultsHelpFormatter, default_config_files=['./.super-auto-comb.txt']) 
+    parser = configargparse.ArgumentParser(description='Process Comb data files.', formatter_class=configargparse.ArgumentDefaultsHelpFormatter, default_config_files=['./super-auto-comb.txt']) 
 
-    parser.add('-c', '--config', is_config_file=True, help='Config file path')
+    parser.add('-c', '--config', is_config_file=True, help='Config file path.')
 
 
-    parser.add_argument('--do', nargs='+', type=str,  help='Name(s) of designed oscillator to be processed') 
+    parser.add_argument('--do', nargs='+', type=str,  help='Name(s) of designed oscillator to be processed.') 
 
 
     parser.add_argument('--start',  help='Start date as Date (YYYY-MM-DD), MJD or -n previous days.', default='-1', type=str) 
@@ -55,20 +54,20 @@ def parse_args(args):
 
 
     parser.add_argument('--comb-dir',  help='Directory of comb data', default='.') 
-    parser.add_argument('--setup-dir',  help='Directory of setup data (describes comb and designed oscillator setup)', default='./Setup')
+    parser.add_argument('--setup-dir',  help='Directory of setup data (describes comb and designed oscillator setup).', default='./Setup')
 
-    parser.add_argument('--time-format', choices=['iso', 'mjd', 'unix'], help='Output time format',  default='mjd')
+    parser.add_argument('--time-format', choices=['iso', 'mjd', 'unix'], help='Output time format.',  default='mjd')
 
     parser.add_argument('--do-not-fix-summer-time', action='store_true', help='Will not attempt to fix summer time.')
 
-    parser.add_argument('--median-filter', action='store_true', help='Also apply a median filter')
-    parser.add_argument('--median-filter-window', type=int, help='Number of points in the median filter', default=60)
-    parser.add_argument('--median-filter-threshold', type=float, help='Median filter threshold', default=250.)
+    parser.add_argument('--median-filter', action='store_true', help='Also apply a median filter.')
+    parser.add_argument('--median-filter-window', type=int, help='Number of points in the median filter.', default=60)
+    parser.add_argument('--median-filter-threshold', type=float, help='Median filter threshold.', default=250.)
 
-    parser.add_argument('--max-columns', type=int, help='Number of columns in the comb datafile', default=12)
+    parser.add_argument('--max-columns', type=int, help='Number of columns in the comb datafile.', default=12)
 
     parser.add_argument('--operator', type=str, help='Person in charge of the analysis.', default='')
-    parser.add_argument('--flag', type=int, help='Flag for confidence level (0 = Discarded, 1 = Experimental, 2 = Operational)', default=1)
+    parser.add_argument('--flag', type=int, help='Flag for confidence level (0 = Discarded, 1 = Experimental, 2 = Operational).', default=1)
 
 
     parser.add_argument('--track-phys', action='store_true', help='Track changes on the physical oscillator.')
@@ -76,6 +75,8 @@ def parse_args(args):
     parser.add_argument('--track-comb', action='store_true', help='Track changes on the comb.')
     parser.add_argument('--track-cirt', action='store_true', help='Track changes of the Circular T month.')
 
+    parser.add_argument('--auto', action='store_true', help='Save/recall the last date processed to automatically process new daily data.')
+    parser.add_argument('--auto-file', type=str, help='File where to store the last processed date.', default = './super-auto-last.txt')
     # fmt: on
 
     return parser.parse_args(args)
@@ -95,8 +96,20 @@ def cli():
 
 
 def main(args):
-    start = parse_input_date(args.start)
-    stop = parse_input_date(args.stop)
+    if args.auto:
+        try:
+            auto_list = np.loadtxt(args.auto_file, dtype=str)
+            auto_list = list(np.atleast_1d(auto_list))
+            start = parse_input_date(auto_list[-1])
+
+        except (FileNotFoundError, ValueError):
+            auto_list = []
+            start = parse_input_date(args.start)
+
+        stop = parse_input_date(1)
+    else:
+        start = parse_input_date(args.start)
+        stop = parse_input_date(args.stop)
 
     # LOOP 1: load DOs info
     do_bar = tqdm(args.do)
@@ -372,5 +385,11 @@ def main(args):
 
                 out_dir = os.path.join(args.dir, s["name"])
                 rl.save_link_to_dir(out_dir, link, time_format=args.time_format, message=message)
+
+    # if I got here and was in auto, i can update the last processed date file
+    if args.auto:
+        # TODO: maybe this should be last processed date
+        auto_list += [today()]
+        np.savetxt(args.auto_file, auto_list, fmt="%s")
 
     return True

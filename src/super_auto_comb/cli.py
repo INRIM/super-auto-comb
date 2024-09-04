@@ -16,7 +16,12 @@ import tintervals.rocitlinks as rl
 from tqdm import tqdm
 
 from super_auto_comb.calc import beat2y
-from super_auto_comb.deglitch import deglitch
+from super_auto_comb.deglitch import (
+    deglitch_from_bounds,
+    deglitch_from_double_counting,
+    deglitch_from_f0,
+    deglitch_from_median_filter,
+)
 from super_auto_comb.fix_files import find_files, fix_files
 from super_auto_comb.load_files import genfromkk
 from super_auto_comb.track_changes import (
@@ -199,14 +204,15 @@ def main(args):
                     comb = s["comb"]
                     nominal = s["nominal"]
                     N = s["N"]  # limit between start/stop
-                    frep = s["frep_" + comb]
+                    f_rep = s["frep_" + comb]
                     f0 = s["f0_" + comb]
-                    fbeat_sign = s["fbeat_sign"]
-                    kscale = s["kscale"]
+                    f_beat_sign = s["fbeat_sign"]
+                    k_scale = s["kscale"]
                     f0_scale = s["f0_scale"]
-                    foffset = s["foffset"]
+                    f_offset = s["foffset"]
 
                     columns = df_extract(s, ["counter", "counter1", "counter2"])
+                    columns = np.atleast_1d(columns).astype(int)
                     bounds = (
                         df_extract(s, ["min", "min1", "min2"]),
                         df_extract(s, ["max", "max1", "max2"]),
@@ -221,39 +227,45 @@ def main(args):
                     median_window = args.median_filter_window
                     median_threshold = args.median_filter_threshold
 
-                    # deglitch(alldata,  columns, bounds=(-np.inf, np.inf), los=0., threshold=0.2, glitch_ext=3, median_window=60, median_threshold=250.):
-                    fbeat, mask1, mask2, mask3, ptp = deglitch(
-                        data,
-                        columns,
-                        bounds,
-                        los,
-                        threshold,
-                        glitch_ext=3,
-                        median_window=median_window,
-                        median_threshold=median_threshold,
-                    )
+                    red_data = data[:, columns]
+                    f0_meas = data[:, s["counter_f0_" + comb]]
+                    los = np.resize(np.asarray(los, dtype=float), columns.shape[0])
+                    f_beat = np.mean(red_data + los, axis=-1)
 
-                    # mask4
-                    # f0
-                    f0_diff = data[:, s["counter_f0_" + comb]] - np.abs(
-                        float(s["f0_" + comb])
-                    )
-                    mask4 = np.abs(f0_diff) < 0.25
-                    tmask = mask1 & mask2 & mask3 & mask4
+                    # deglitch(alldata,  columns, bounds=(-np.inf, np.inf), los=0., threshold=0.2, glitch_ext=3, median_window=60, median_threshold=250.):
+                    # f_beat, mask1, mask2, mask3, ptp = deglitch(
+                    #     data,
+                    #     columns,
+                    #     bounds,
+                    #     los,
+                    #     threshold,
+                    #     glitch_ext=3,
+                    #     median_window=median_window,
+                    #     median_threshold=median_threshold,
+                    # )
+
+                    mask1 = deglitch_from_bounds(red_data, bounds)
+
+                    mask2 = deglitch_from_double_counting(red_data + los, threshold, glitch_ext=3)
+
+                    mask3 = deglitch_from_f0(f0_meas, f0_nominal=s["f0_" + comb], threshold=0.25)
+
+                    median_deglitch = True
+
+                    tmask = mask1 & mask2 & mask3
+                    if median_deglitch:
+                        mask4 = deglitch_from_median_filter(
+                            f_beat,
+                            premask=tmask,
+                            median_window=median_window,
+                            median_threshold=median_threshold,
+                        )
+                        tmask = mask1 & mask2 & mask3 & mask4
+
                     flag = (tmask) * args.flag
 
-                    # beat2y(fbeat,  nominal,  N, frep, f0, fbeat_sign=1, kscale=1, f0_scale=1, foffset=0.):
-                    y = beat2y(
-                        fbeat,
-                        nominal,
-                        N,
-                        frep,
-                        f0,
-                        fbeat_sign,
-                        kscale,
-                        f0_scale,
-                        foffset,
-                    )
+                    # beat2y(f_beat,  nominal,  N, f_rep, f0, f_beat_sign=1, k_scale=1, f0_scale=1, f_offset=0.):
+                    y = beat2y(f_beat, nominal, N, f_rep, f0, f_beat_sign, k_scale, f0_scale, f_offset)
 
                     out = np.column_stack((data[:, 0], y, flag))
 
@@ -265,10 +277,10 @@ def main(args):
                     # Some Figure of merit
                     # * measurement of channel deviation
                     # sqrt<|diff between channels|^2>
-                    ch_dev = np.sqrt(np.mean(ptp[tmask] ** 2))
+                    # ch_dev = np.sqrt(np.mean(ptp[tmask] ** 2))
 
                     # f0 deviation
-                    f0_dev = np.mean(f0_diff[tmask])
+                    # f0_dev = np.mean(f0_diff[tmask])
 
                     # plot here
                     fig, axs = plt.subplots(3, sharex=True, figsize=(6.4 * 1.5, 4.8))
@@ -276,46 +288,16 @@ def main(args):
 
                     axs[0].set_ylabel("Flag")
                     # axs[0].plot(mjd, flag, label=f'Removed points = {sum(flag==0)}')
-                    axs[0].fill_between(
-                        mjd,
-                        3 - mask1,
-                        2,
-                        label=f"Filter mask -> {sum(~mask1)}",
-                        step="pre",
-                    )
-                    axs[0].fill_between(
-                        mjd,
-                        2 - mask2,
-                        1,
-                        label=f"Glitch mask -> {sum(~mask2)}\nCh. dev {ch_dev*1000:.2f} mHz",
-                        step="pre",
-                    )
-                    axs[0].fill_between(
-                        mjd,
-                        1 - mask3,
-                        0,
-                        label=f"Median mask -> {sum(~mask3)}",
-                        step="pre",
-                    )
-                    axs[0].fill_between(
-                        mjd,
-                        0 - mask4,
-                        -1,
-                        label=f"f0 mask -> {sum(~mask4)}\nf0 dev {f0_dev*1000:.2f} mHz ",
-                        step="pre",
-                    )
-                    axs[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))
+                    axs[0].fill_between(mjd, 3 - mask1, 2, label=f"Filter mask -> {sum(~mask1)}", step="pre")
+                    axs[0].fill_between(mjd, 2 - mask2, 1, label=f"Glitch mask -> {sum(~mask2)}", step="pre")
+                    axs[0].fill_between(mjd, 1 - mask3, -1, label=f"f0 mask -> {sum(~mask3)}", step="pre")
+                    if len(mask4) > 1:
+                        axs[0].fill_between(mjd, 1 - mask4, 0, label=f"Median mask -> {sum(~mask4)}", step="pre")
 
-                    axs[1].plot(mjd, fbeat * 1e-6, label="raw")
-                    axs[1].plot(
-                        mjd[flag > 0],
-                        fbeat[flag > 0] * 1e-6,
-                        ".",
-                        label=f"All masks -> {sum(flag==0)}",
-                    )
-                    axs[1].plot(
-                        mjd[~(mask2)], fbeat[~(mask2)] * 1e-6, "o", label=f"Glitches"
-                    )
+                    axs[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))
+                    axs[1].plot(mjd, f_beat * 1e-6, label="raw")
+                    axs[1].plot(mjd[flag > 0], f_beat[flag > 0] * 1e-6, ".", label=f"All masks -> {sum(flag==0)}")
+                    axs[1].plot(mjd[~(mask2)], f_beat[~(mask2)] * 1e-6, "o", label="Glitches")
                     axs[1].set_ylabel("Beat /MHz")
                     axs[1].legend(loc="center left", bbox_to_anchor=(1, 0.5))
 
@@ -323,13 +305,7 @@ def main(args):
                         meany = np.mean(y[flag > 0])
                         axs[2].axhline(meany, label=f"Mean = {meany:.3}", color="black")
 
-                    axs[2].plot(
-                        mjd[flag > 0],
-                        y[flag > 0],
-                        ".",
-                        label=f"Points = {sum(flag>0)}",
-                        color="C1",
-                    )
+                    axs[2].plot(mjd[flag > 0], y[flag > 0], ".", label=f"Points = {sum(flag>0)}", color="C1")
                     # axs[2].plot(mjd[flag>0], uniform_filter1d(y[flag>0],1000), '.', label=f'Moving average')
                     axs[2].set_ylabel("y")
                     axs[2].set_xlabel("MJD")
@@ -368,9 +344,7 @@ def main(args):
             this_stop = min(stop, s["datetime_end"])
 
             # mask info
-            infomask = (do_in_setup["datetime_end"] >= start) & (
-                do_in_setup["datetime"] < stop
-            )
+            infomask = (do_in_setup["datetime_end"] >= start) & (do_in_setup["datetime"] < stop)
             # note that ths_setup may have more lines for each do_out_setup
             this_setup = do_in_setup[infomask]
 
@@ -402,8 +376,6 @@ def main(args):
                 link.drop_invalid()
 
                 out_dir = os.path.join(args.dir, s["name"])
-                rl.save_link_to_dir(
-                    out_dir, link, time_format=args.time_format, message=message
-                )
+                rl.save_link_to_dir(out_dir, link, time_format=args.time_format, message=message)
 
     return True

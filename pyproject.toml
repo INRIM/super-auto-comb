@@ -29,3 +29,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 super-auto-comb = "super_auto_comb.cli:cli"
+
+[tool.ruff]
+line-length = 120

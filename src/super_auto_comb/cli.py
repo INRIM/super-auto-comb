@@ -230,7 +230,8 @@ def main(args):
                     red_data = data[:, columns]
                     f0_meas = data[:, s["counter_f0_" + comb]]
                     los = np.resize(np.asarray(los, dtype=float), columns.shape[0])
-                    f_beat = np.mean(red_data + los, axis=-1)
+                    los_data = np.abs(red_data + los)
+                    f_beat = np.mean(los_data, axis=-1)
 
                     # deglitch(alldata,  columns, bounds=(-np.inf, np.inf), los=0., threshold=0.2, glitch_ext=3, median_window=60, median_threshold=250.):
                     # f_beat, mask1, mask2, mask3, ptp = deglitch(
@@ -246,7 +247,7 @@ def main(args):
 
                     mask1 = deglitch_from_bounds(red_data, bounds)
 
-                    mask2 = deglitch_from_double_counting(red_data + los, threshold, glitch_ext=3)
+                    mask2 = deglitch_from_double_counting(los_data, threshold, glitch_ext=3)
 
                     mask3 = deglitch_from_f0(f0_meas, f0_nominal=s["f0_" + comb], threshold=0.25)
 
@@ -261,6 +262,8 @@ def main(args):
                             median_threshold=median_threshold,
                         )
                         tmask = mask1 & mask2 & mask3 & mask4
+                    else:
+                        mask4 = np.ones_like(mask1).astype(bool)
 
                     flag = (tmask) * args.flag
 
@@ -290,9 +293,8 @@ def main(args):
                     # axs[0].plot(mjd, flag, label=f'Removed points = {sum(flag==0)}')
                     axs[0].fill_between(mjd, 3 - mask1, 2, label=f"Filter mask -> {sum(~mask1)}", step="pre")
                     axs[0].fill_between(mjd, 2 - mask2, 1, label=f"Glitch mask -> {sum(~mask2)}", step="pre")
-                    axs[0].fill_between(mjd, 1 - mask3, -1, label=f"f0 mask -> {sum(~mask3)}", step="pre")
-                    if len(mask4) > 1:
-                        axs[0].fill_between(mjd, 1 - mask4, 0, label=f"Median mask -> {sum(~mask4)}", step="pre")
+                    axs[0].fill_between(mjd, 1 - mask3, 0, label=f"f0 mask -> {sum(~mask3)}", step="pre")
+                    axs[0].fill_between(mjd, 0 - mask4, -1, label=f"Median mask -> {sum(~mask4)}", step="pre")
 
                     axs[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))
                     axs[1].plot(mjd, f_beat * 1e-6, label="raw")
@@ -313,7 +315,7 @@ def main(args):
                     axs[2].legend(loc="center left", bbox_to_anchor=(1, 0.5))
 
                     plt.tight_layout()
-                    figdir = os.path.join(args.dir, s["name"], args.fig_dir, do)
+                    figdir = os.path.join(args.fig_dir, s["name"], do)
 
                     if not os.path.exists(figdir):
                         os.makedirs(figdir)

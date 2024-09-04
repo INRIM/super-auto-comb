@@ -1,4 +1,3 @@
-import argparse
 import decimal
 import glob
 import os
@@ -7,6 +6,7 @@ import shutil
 import sys
 from datetime import date, datetime, timedelta
 
+import configargparse
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.lib.recfunctions as rfn
@@ -44,7 +44,9 @@ plt.ioff()
 def parse_args(args):
     # fmt: off
 
-    parser = argparse.ArgumentParser(description='Process Comb data files.', formatter_class=argparse.ArgumentDefaultsHelpFormatter) 
+    parser = configargparse.ArgumentParser(description='Process Comb data files.', formatter_class=configargparse.ArgumentDefaultsHelpFormatter, default_config_files=['./.super-auto-comb.txt']) 
+
+    parser.add('-c', '--config', is_config_file=True, help='Config file path')
 
 
     parser.add_argument('--do', nargs='+', type=str,  help='Name(s) of designed oscillator to be processed') 

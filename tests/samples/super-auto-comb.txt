@@ -1,0 +1,8 @@
+do = [LoYb]
+start = 59658
+stop = 59660
+dir = ./tests/Outputs
+fig-dir = ./tests/Outputs/Figures
+comb-dir = ./tests/samples
+setup-dir = ./tests/samples
+track-cirt = True

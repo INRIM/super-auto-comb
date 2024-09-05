@@ -30,9 +30,6 @@ from super_auto_comb.track_changes import (
 )
 from super_auto_comb.utils import generate_dates, parse_input_date, today
 
-plt.close("all")
-plt.ioff()
-
 
 def parse_args(args):
     """Utility for Configargparse arguments."""
@@ -113,6 +110,9 @@ def main(args):
     else:
         start = parse_input_date(args.start)
         stop = parse_input_date(args.stop)
+
+    # avoid interactive plotting
+    plt.ioff()
 
     # LOOP 1: load DOs info
     do_bar = tqdm(args.do)
@@ -331,9 +331,7 @@ def main(args):
                     figname = os.path.join(figdir, basename + ".png")
                     plt.savefig(figname)
 
-                    # bug: this leave a figure window hanging around.
-                    # it does not seem necessary though since I called ioff()
-                    # plt.close()
+                    plt.close()
 
     # LOOP 4: save files
     # LOOP 4a: dos

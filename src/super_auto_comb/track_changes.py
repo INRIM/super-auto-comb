@@ -76,7 +76,7 @@ def df_add_name(df, fix, var=[]):
 
 def df_load(file):
     """Load a Dataframe from a file. The first column in the file should be a ISO datetime."""
-    # two step file loading
+    # two step file loading to have both the first header line and comments starting with #
     headers = pd.read_csv(file, sep="\t", nrows=1).columns.str.strip(" #")
     df = pd.read_csv(file, sep="\t", converters={0: ti.iso2mjd}, comment="#", header=None, names=headers)
     # remove whitespaces and # from column names

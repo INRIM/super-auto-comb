@@ -2,7 +2,7 @@ from datetime import datetime
 
 import numpy as np
 import tintervals as ti
-import tqdm
+from tqdm import tqdm
 
 from super_auto_comb.utils import is_summer_time_changing_between
 

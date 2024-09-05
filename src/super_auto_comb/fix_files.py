@@ -4,6 +4,22 @@ import shutil
 
 
 def fix_files(dir, date, regex_conflict="%y%m%d_?_Frequ (conflicted).txt"):
+    """Find and rename files from K+K counters conflicted by Pcloud cloud sync.
+
+    Parameters
+    ----------
+    dir : str
+        Input directory
+    date : datetime date
+        Input date
+    regex_conflict : str, optional
+        Regex matching conflicting files, by default "%y%m%d_?_Frequ (conflicted).txt"
+
+    Returns
+    -------
+    con_files : list
+        List of matching files found and hopefully fixed.
+    """
     # Pcloud may have conflicted files
     test = date.strftime(regex_conflict)
     con_files = [os.path.basename(_) for _ in glob.glob(os.path.join(dir, test))]
@@ -23,6 +39,22 @@ def fix_files(dir, date, regex_conflict="%y%m%d_?_Frequ (conflicted).txt"):
 
 
 def find_files(dir, date, regex="%y%m%d_?_Frequ.txt"):
+    """Return a list of files in a directory, matching the K+K filename format for a given date.
+
+    Parameters
+    ----------
+    dir : str
+        Input directory
+    date : datetime date
+        Input date
+    regex_conflict : str, optional
+        Regex for matching files, by default "%y%m%d_?_Frequ.txt"
+
+    Returns
+    -------
+    files : list
+        List of matching files.
+    """
     test = date.strftime(regex)
     files = [os.path.basename(_) for _ in glob.glob(os.path.join(dir, test))]
     return files

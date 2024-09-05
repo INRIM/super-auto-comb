@@ -35,6 +35,7 @@ plt.ioff()
 
 
 def parse_args(args):
+    """Utility for Configargparse arguments."""
     # fmt: off
 
     parser = configargparse.ArgumentParser(description='Process Comb data files.', formatter_class=configargparse.ArgumentDefaultsHelpFormatter, default_config_files=['./super-auto-comb.txt']) 
@@ -83,6 +84,7 @@ def parse_args(args):
 
 
 def cli():
+    """CLI entry point. Parse arguments from sys and launch the main script if necessary."""
     args = parse_args(sys.argv[1:])
 
     if not os.path.exists(args.dir):
@@ -96,6 +98,7 @@ def cli():
 
 
 def main(args):
+    """Main script for processign comb data."""
     if args.auto:
         try:
             auto_list = np.loadtxt(args.auto_file, dtype=str)
@@ -262,8 +265,8 @@ def main(args):
                         mask4 = deglitch_from_median_filter(
                             f_beat,
                             premask=tmask,
-                            median_window=args.median_window,
-                            median_threshold=args.median_threshold,
+                            median_window=args.median_filter_window,
+                            median_threshold=args.median_filter_threshold,
                         )
                         tmask = mask1 & mask2 & mask3 & mask4
                     else:

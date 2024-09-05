@@ -1,3 +1,14 @@
+"""
+This sub-package works with Pandas Dataframes whose first column is 'datetime'.
+They are interpreted as setup description (frequency, counter channels, etc..) from the given datetime to the datetime on the next row.
+These dataframes can me manipulated (loaded, merged, reduced, etc...) to keep track of only a subset of columns.
+For loading inputs, all changes are tracked (e.g., I need to know when a counter channel is changed).
+Outputs are instead customizable (e.g., I may or may not want to separate data based on which comb is used).
+A colum 'name' can be added to describe each row based on some columns.
+A column 'datetime_end' is always added to be equal to the datetime in the next row.
+
+"""
+
 import os
 
 import numpy as np
@@ -65,9 +76,11 @@ def df_add_name(df, fix, var=[]):
 
 def df_load(file):
     """Load a Dataframe from a file. The first column in the file should be a ISO datetime."""
-    df = pd.read_csv(file, sep="\t", converters={0: ti.iso2mjd})
+    # two step file loading
+    headers = pd.read_csv(file, sep="\t", nrows=1).columns.str.strip(" #")
+    df = pd.read_csv(file, sep="\t", converters={0: ti.iso2mjd}, comment="#", header=None, names=headers)
     # remove whitespaces and # from column names
-    df.columns = df.columns.str.strip(" #")
+    # df.columns = df.columns.str.strip(" #")
 
     df_fix_end(df)
 
@@ -75,6 +88,7 @@ def df_load(file):
 
 
 def df_limit(df, start, stop):
+    """mask the Dataframe from start to stop."""
     df_fix_end(df)
     mask = (df["datetime_end"] >= start) & (df["datetime"] < stop)
     return df[mask]
@@ -144,6 +158,7 @@ def load_do_setup(do, dir):
 
 
 def df_from_cirt(start, stop):
+    """Return a Dataframe tracking changes in Circular T number."""
     cirt_start, cirt_stop = ti.cirtvals(start, stop).T
     cirt_labels = ["{}-{:02d}".format(*ti.mjd2cirt(x)) for x in cirt_start]
     return pd.DataFrame({"datetime": cirt_start, "cirt": cirt_labels})
@@ -153,6 +168,7 @@ def df_from_cirt(start, stop):
 # A column tracked for changes will always have a unique value associated for each row of inputs and outputs df.
 # Columns not tracked for changes may have more rows in in the input df than in the output df
 def format_possibly_changing_info(df, key):
+    """Return a single string from values in a Dataframe column that may be one or more."""
     uni = df[key].unique()
     what = "/".join(uni)
 

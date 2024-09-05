@@ -3,6 +3,7 @@ from scipy.ndimage import median_filter, minimum_filter1d
 
 
 def prepare_bounds(bounds, n):
+    """Resize bounds to match arrays dimensions."""
     lb, ub = [np.asarray(b, dtype=float) for b in bounds]
     if lb.ndim == 0:
         lb = np.resize(lb, n)
@@ -14,6 +15,21 @@ def prepare_bounds(bounds, n):
 
 
 def deglitch_from_bounds(data, bounds=(-np.inf, np.inf)):
+    """Return a mask of data invalid because out of bounds.
+
+    Parameters
+    ----------
+    data : array_like
+        Input data
+    bounds : 2-tuple of array-like, optional
+        Lower and upper bounds for each column of the input array, by default (-np.inf, np.inf)
+
+    Returns
+    -------
+    mask1 : array
+        Mask data out of bounds.
+
+    """
     # from scipy curve_fit
     # bounds 2-tuple of array_like: Each element of the tuple must be either an array with the length equal to the number of parameters, or a scalar
     data = np.atleast_2d(data)
@@ -35,6 +51,22 @@ def deglitch_from_bounds(data, bounds=(-np.inf, np.inf)):
 
 
 def deglitch_from_double_counting(data, threshold=0.2, glitch_ext=3):
+    """Return a mask of data from double counting. Uses numpy ptp (peak-to-peak) function.
+
+    Parameters
+    ----------
+    data : array_like
+        Input data_
+    threshold : float, optional
+        double counting threshold, by default 0.2
+    glitch_ext : int, optional
+        Extend glitch to neighbourg points, by default 3
+
+    Returns
+    -------
+    mask2 : array
+        Mask data for glitches detected by double counting.
+    """
     # mask2 implement double counting
     # using numpy peak-to-peak function
     # note that this handles nicely both single counting (= no glitch detection)
@@ -46,84 +78,59 @@ def deglitch_from_double_counting(data, threshold=0.2, glitch_ext=3):
     return mask2
 
 
-def deglitch_from_median_filter(f_beat, premask, median_window=60, median_threshold=250, glitch_ext=3):
-    rolled = median_filter(f_beat[premask], median_window)
-    mask3 = (
-        abs(f_beat[premask] - rolled) < median_threshold
-    )  # 250 Hz correspond to a 5 sigma criteria assuming 1e-13 at 1 s
-    mask3 = minimum_filter1d(mask3, glitch_ext)
-    # mask3 applies oly to already masked data
-    emask3 = np.ones_like(premask).astype(bool)
-    emask3[premask] = mask3
-
-    return emask3
-
-
 def deglitch_from_f0(f0, f0_nominal, threshold=0.25):
+    """Return a mask for invalid data because f0 is out of bounds.
+
+    Parameters
+    ----------
+    f0 : array_like, 1d
+        array of f0 values in Hz
+    f0_nominal : float or Decimal
+        nominal f0 value in Hz
+    threshold : float, optional
+        Threshold value in Hz, by default 0.25
+
+    Returns
+    -------
+    mask3 : array
+        mask data for f0 out of bounds.
+    """
     # mask4
     # f0
     f0_diff = f0 - np.abs(float(f0_nominal))
-    mask4 = np.abs(f0_diff) < threshold
+    mask3 = np.abs(f0_diff) < threshold
 
-    return mask4
-
-
-# def deglitch(
-#     alldata,
-#     columns,
-#     bounds=(-np.inf, np.inf),
-#     los=0.0,
-#     threshold=0.2,
-#     glitch_ext=3,
-#     median_window=60,
-#     median_threshold=250.0,
-# ):
-#     """Deglitch comb data along given columns.
-#     1. Each column is compared by some bounds and shifted by a local oscillator.
-#     2. Glitches are detected as differences between the columns exceeding a threshold.
-#     3. A median filter is applied to reduce junk data
-
-#     Parameters
-#     ----------
-#     alldata : ndarray
-#             KK data extracted by genfromkk
-#     columns : int or array-like
-#             columns to be deglitched
-#     bounds : tuple, optional
-#             2-tuple of array_like, by default (-np.inf, np.inf)
-#             Each element of the tuple must be either an array with the length equal to the number of columns, or a scalar
-#     los : float or array-like, optional
-#             Local oscillators to be added to each column, by default 0.
-#     threshold : float, optional
-#             Deglitch mask threshold, by default 0.2
+    return mask3
 
 
-#     """
-#     # columns could be a int or an array like
-#     columns = np.atleast_1d(columns).astype(int)
-#     N = columns.shape[0]
+def deglitch_from_median_filter(f_beat, premask, median_window=60, median_threshold=250.0, glitch_ext=3):
+    """Return a mask for data dissimila to neighbors.
 
-#     data = alldata[:, columns]
+    Parameters
+    ----------
+    f_beat : array_like
+        Input data
+    premask : array_like
+        Mask to apply to input data (from other deglitch functions)
+    median_window : int, optional
+        Number of point over calculating rolling median filter, by default 60
+    median_threshold : float, optional
+        Threshold value in Hz, by default 250.
+    glitch_ext : int, optional
+        Extend glitch to neighbourg points, by default 3
 
-#     mask1 = deglitch_from_bounds(data, columns, bounds)
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    rolled = median_filter(f_beat[premask], median_window)
+    mask4 = (
+        abs(f_beat[premask] - rolled) < median_threshold
+    )  # 250 Hz correspond to a 5 sigma criteria assuming 1e-13 at 1 s
+    mask4 = minimum_filter1d(mask4, glitch_ext)
+    # mask3 applies oly to already masked data
+    emask4 = np.ones_like(premask).astype(bool)
+    emask4[premask] = mask4
 
-#     # local oscillators
-#     los = np.resize(np.asarray(los, dtype=float), N)
-#     data = np.abs(data + los)
-
-#     fbeat = np.mean(data, axis=-1)
-
-#     mask2 = deglitch_from_double_counting(data, threshold, glitch_ext)
-
-#     # mask3 median-filter
-#     mask = mask1 & mask2
-#     rolled = median_filter(fbeat[mask], median_window)
-#     mask3 = (
-#         abs(fbeat[mask] - rolled) < median_threshold
-#     )  # 250 Hz correspond to a 5 sigma criteria assuming 1e-13 at 1 s
-#     mask3 = minimum_filter1d(mask3, glitch_ext)
-#     # mask3 applies oly to already masked data
-#     emask3 = np.ones_like(mask).astype(bool)
-#     emask3[mask] = mask3
-
-#     return fbeat, mask1, mask2, emask3, ptp
+    return emask4

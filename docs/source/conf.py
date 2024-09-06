@@ -9,9 +9,9 @@
 from pathlib import Path
 
 project = "Super-auto-comb"
-copyright = "2024, Marco Pizzocaro"
+copyright = "2023-2024 Marco Pizzocaro - Istituto Nazionale di Ricerca Metrologica (INRIM)"
 author = "Marco Pizzocaro"
-release = "0.1.0"
+release = "1.0.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -27,6 +27,7 @@ extensions = [
 autoapi_type = "python"
 autoapi_dirs = [f"{Path(__file__).parents[2]}/src"]
 
+myst_enable_extensions = ["dollarmath", "amsmath"]
 
 templates_path = ["_templates"]
 exclude_patterns = []

@@ -302,7 +302,7 @@ def main(args):
                     axs[0].fill_between(mjd, 2 - mask2, 1, label=f"Glitch mask -> {sum(~mask2)}", step="pre")
                     axs[0].fill_between(mjd, 1 - mask3, 0, label=f"f0 mask -> {sum(~mask3)}", step="pre")
                     if args.median_filter:
-                        label = f"Median mask ({args.median_window} s/{args.median_threshold} Hz)\n-> {sum(~mask4)}"
+                        label = f"Median mask ({args.median_filter_window} s/{args.median_filter_threshold} Hz)\n-> {sum(~mask4)}"
                         axs[0].fill_between(mjd, 0 - mask4, -1, label=label, step="pre")
 
                     axs[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))

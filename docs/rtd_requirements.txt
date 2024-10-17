@@ -823,9 +823,9 @@ sphinxcontrib-qthelp==2.0.0 ; python_version >= "3.10" and python_version < "4.0
 sphinxcontrib-serializinghtml==2.0.0 ; python_version >= "3.10" and python_version < "4.0" \
     --hash=sha256:6e2cb0eef194e10c27ec0023bfeb25badbbb5868244cf5bc5bdc04e4464bf331 \
     --hash=sha256:e9d912827f872c029017a53f0ef2180b327c3f7fd23c87229f7a8e8b70031d4d
-starlette==0.38.4 ; python_version >= "3.10" and python_version < "4.0" \
-    --hash=sha256:526f53a77f0e43b85f583438aee1a940fd84f8fd610353e8b0c1a77ad8a87e76 \
-    --hash=sha256:53a7439060304a208fea17ed407e998f46da5e5d9b1addfea3040094512a6379
+starlette==0.41.0 ; python_version >= "3.10" and python_version < "4.0" \
+    --hash=sha256:39cbd8768b107d68bfe1ff1672b38a2c38b49777de46d2a592841d58e3bf7c2a \
+    --hash=sha256:a0193a3c413ebc9c78bff1c3546a45bb8c8bcb4a84cae8747d650a65bd37210a
 tintervals==0.1.7 ; python_version >= "3.10" and python_version < "4.0" \
     --hash=sha256:7e50aa8cdc4b7bc24dae2cfd8c0591b6e5dc12fa2060c7c2e469c0533ecc5442 \
     --hash=sha256:eee68402750e9c5ce0d97a2406a48406e75938ccd84e32655ee9efad5e12dd95

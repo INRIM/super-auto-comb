@@ -9,9 +9,9 @@
 from pathlib import Path
 
 project = "Super-auto-comb"
-copyright = "2023-2024 Marco Pizzocaro - Istituto Nazionale di Ricerca Metrologica (INRIM)"
+copyright = "2023-2025 Marco Pizzocaro - Istituto Nazionale di Ricerca Metrologica (INRIM)"
 author = "Marco Pizzocaro"
-release = "1.0.0"
+release = "1.1.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

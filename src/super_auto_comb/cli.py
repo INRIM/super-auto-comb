@@ -144,8 +144,8 @@ def main(args):
 
         df_add_name(
             df,
-            fix=["cirt"],
-            var=[x for x in ["physical", "comb", "maser"] if x in tracked],
+            fix=[],
+            var=[x for x in ["physical", "comb", "maser", "cirt"] if x in tracked],
         )
 
         # output_df only has major changes tracked

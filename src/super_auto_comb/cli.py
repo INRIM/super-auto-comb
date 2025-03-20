@@ -199,7 +199,7 @@ def main(args):
             # 	for x in loyb[loyb['datetime']>59900].iloc:
             #  ...:     print(x['cirt'])
             for s in do_setup.iloc:
-                if s["valid"] is False:
+                if s["valid"] == False:  # noqa: E712 # the valid column store np.bool_ for whatever reason
                     continue
 
                 this_start = max(start, s["datetime"])
@@ -346,7 +346,7 @@ def main(args):
 
         # LOOP 4b: tracked changes
         for s in do_out_setup.iloc:
-            if s["valid"] is False:
+            if s["valid"] == False:  # noqa: E712 # the valid column store np.bool_ for whatever reason
                 continue
 
             this_start = max(start, s["datetime"])

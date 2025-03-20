@@ -81,3 +81,20 @@ def test_main_auto():
     rocit_data = rl.load_link_from_dir("./tests/Outputs/2022-03/INRIM_HM-INRIM_LoYb")
     assert len(rocit_data.t) == 3600
     assert rocit_data.oscA.name == "INRIM_LoYb"
+
+
+def test_main_with_invalid():
+    # delete previous results
+    try:
+        shutil.rmtree("./tests/Outputs/")
+    except FileNotFoundError:
+        pass
+    args = parse_args(
+        "--do LoYb_with_invalid --start 59658 --stop 59660 --dir ./tests/Outputs --fig-dir ./tests/Outputs/Figures --comb-dir ./tests/samples --setup-dir ./tests/samples --track-cirt".split(
+            " "
+        )
+    )
+    main(args)
+    rocit_data = rl.load_link_from_dir("./tests/Outputs/INRIM_HM-INRIM_LoYb_with_invalid")
+    assert len(rocit_data.t) == 1801
+    assert rocit_data.oscA.name == "INRIM_LoYb_with_invalid"

@@ -124,11 +124,20 @@ def deglitch_from_median_filter(f_beat, premask, median_window=60, median_thresh
     _type_
         _description_
     """
+    premask = premask.astype(bool)
+
+    if f_beat[premask].size == 0:
+        return np.ones_like(premask, dtype=bool)
+
     rolled = median_filter(f_beat[premask], median_window)
     mask4 = (
         abs(f_beat[premask] - rolled) < median_threshold
     )  # 250 Hz correspond to a 5 sigma criteria assuming 1e-13 at 1 s
     mask4 = minimum_filter1d(mask4, glitch_ext)
+
+    if mask4.shape != f_beat[premask].shape:
+        raise ValueError(f"Shape mismatch: mask4={mask4.shape}, f_beat[premask]={f_beat[premask].shape}")
+
     # mask3 applies oly to already masked data
     emask4 = np.ones_like(premask).astype(bool)
     emask4[premask] = mask4
